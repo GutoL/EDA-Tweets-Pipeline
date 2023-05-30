@@ -141,14 +141,14 @@ class EdaTextAnalysis():
     def most_visible_users_query(self, fields, limit=10000):
         self.replies_query(fields, limit=limit)
         self.retweets_query(fields, limit=limit)
-        ress = subprocess.call("Rscript utils_scripts/find_VisibleUsers.R "+self.results_path, shell=True)
+        ress = subprocess.call("Rscript utils/find_VisibleUsers.R "+self.results_path, shell=True)
     
 
     def verified_users_query(self,username_column, verified_column, limit=10000):
-        query = "SELECT DISTINCT("+username_column+") FROM `"+self.database_link+"` WHERE "+verified_column+' = "true"'
+        query = "SELECT DISTINCT("+username_column+") FROM `"+self.database_link+"` WHERE "+verified_column+' = true' # = '"true"'
 
         if limit:
-            query += 'LIMIT '+str(limit)
+            query += ' LIMIT '+str(limit)
 
         return self.run_query(query=query, result_file_name=False)
 
@@ -322,8 +322,11 @@ class EdaTextAnalysis():
         plt.tight_layout(pad=0)
         plt.savefig(self.results_path+'word_cloud.png')
 
-    def analyze_sentiment(self, text_column, limit):
-        query = 'SELECT '+text_column+' FROM `'+self.database_link+'`'+' LIMIT '+str(limit)
+    def analyse_sentiment(self, tweet_id_column, text_column, limit):
+        query = 'SELECT '+tweet_id_column+','+text_column+' FROM `'+self.database_link+'`'
+
+        if limit:
+            query += ' LIMIT '+str(limit)
 
         df = self.run_query(query, False)
 
@@ -334,13 +337,16 @@ class EdaTextAnalysis():
         sentiments = []
         for tweet in df[text_column].values:
             analysis = TextBlob(tweet)
+
             sentiment = analysis.sentiment.polarity
-            sentiments.append((tweet, sentiment))
+            # sentiments.append((tweet, sentiment))
+            sentiments.append(sentiment)
         
+        df['sentiment'] = sentiments
         # It returns a list of tuples, where each tuple contains the tweet and its sentiment score:
         # Note that TextBlob assigns a polarity score between -1 and 1 to each tweet, where -1 indicates negative sentiment, 
         # 0 indicates neutral sentiment, and 1 indicates positive sentiment.
-        return sentiments
+        return df
 
     def run_liwc(self, text_column, dict_name, limit):
         query = 'SELECT '+text_column+' FROM `'+self.database_link+'`'+' LIMIT '+str(limit)
@@ -393,22 +399,29 @@ def pipeline(setup_file_name, fields, results_path):
 
     eda = EdaTextAnalysis(database_link=config['database_link'], credentials=credentials, project_id=config['project_id'], results_path=results_path)
 
+    results = []
+
     print('Starting the pipeline...')
 
-    number_of_tweets = eda.number_of_tweets_query()
+    number_of_tweets = int(eda.number_of_tweets_query())
     print('Number of tweets:', number_of_tweets)
+    results.append( {'Metric':'Number of tweets', 'Value':number_of_tweets})
 
     number_of_users = eda.number_of_users_query(author_column=fields['user_username'])
     print('Number of users:', number_of_users)
+    results.append({'Metric':'Number of users', 'Value':number_of_users})
 
-    number_of_original_tweets = eda.number_of_original_tweets_query(text_column=fields['text_tweet'])
-    print('Number of original tweets:', number_of_original_tweets)
+    number_of_original_tweets = int(eda.number_of_original_tweets_query(text_column=fields['text_tweet']))
+    print('Number of original tweets:', number_of_original_tweets, '➝', (100*number_of_original_tweets)/number_of_tweets, '%')
+    results.append({'Metric':'Number of original tweets', 'Value':number_of_original_tweets})
 
-    number_of_retweets = eda.number_of_retweets_query(text_column=fields['text_tweet'])
-    print('Number of retweets:', number_of_retweets)
+    number_of_retweets = int(eda.number_of_retweets_query(text_column=fields['text_tweet']))
+    print('Number of retweets:', number_of_retweets,'➝', (100*number_of_retweets)/number_of_tweets, '%')
+    results.append({'Metric':'Number of retweets', 'Value':number_of_retweets})
 
-    number_of_replies = eda.number_of_replies_query(text_column=fields['text_tweet'])
-    print('Number of replies:', number_of_replies)
+    number_of_replies = int(eda.number_of_replies_query(text_column=fields['text_tweet']))
+    print('Number of replies:', number_of_replies, '➝', (100*number_of_replies)/number_of_tweets, '%')
+    results.append({'Metric':'Number of replies', 'Value':number_of_replies})
 
     most_active_users = eda.most_active_users_query(text_column=fields['text_tweet'], user_column=fields['user_username'], limit=10000)
     most_active_users.to_csv(results_path+'most_active_users.csv', index=False)
@@ -430,28 +443,35 @@ def pipeline(setup_file_name, fields, results_path):
 
     country = 'United Kingdom'
     tweets_per_country_type = eda.tweets_per_country_query(country_column=fields['tweet_country'], country_code=country)
-    print('Tweets per country:', country+':', tweets_per_country_type.values[0][0])
+    tweets_per_country_type = int(tweets_per_country_type.values[0][0])
+    print('Tweets per country ', country+':', tweets_per_country_type, '➝', (100*tweets_per_country_type)/number_of_tweets, '%')
+    results.append({'Metric':'Number of tweets per country: '+country, 'Value':tweets_per_country_type})
 
     users_per_country = eda.users_per_country_query(username_column=fields['user_username'], country_column=fields['tweet_country'], country_code=country)
     print('Users per country', country+':', users_per_country.shape[0])
+    results.append({'Metric':'Number of tweets per country: '+country, 'Value':users_per_country.shape[0]})
 
     language_code = 'en'
-    tweets_per_language = eda.tweets_per_language_query(language_column=fields['tweet_language'], language_code=language_code)
-    print('Tweets per language('+ language_code+'):', tweets_per_language)
+    tweets_per_language = int(eda.tweets_per_language_query(language_column=fields['tweet_language'], language_code=language_code))
+    print('Tweets per language('+ language_code+'):', tweets_per_language, '➝', (100*tweets_per_language)/number_of_tweets, '%')
+    results.append({'Metric':'Number of tweets per language: '+language_code, 'Value':tweets_per_language})
 
     volume_of_hashtags = eda.volume_of_hashtags_query(hashtag_column=fields['hashtags'])
-    print('Tweets per hashtag:', volume_of_hashtags)
-    
+    print('Number of hashtags:', volume_of_hashtags.shape[0])
+    results.append({'Metric':'Number of hashtags', 'Value':volume_of_hashtags.shape[0]})
     
     df = eda.volume_of_hashtags_per_date_query(hashtag_column=fields['hashtags'], date_column=fields['tweet_date'])
     print('Number of hashtags per day calculated! saved as '+results_path+'number_of_hashtags_per_day.csv')
     df.to_csv(results_path+'number_of_hashtags_per_day.csv', index=False)
     
     number_tweets_featuring_url = eda.all_urls_query(url_column=fields['tweets_url'])
-    print('number of tweets with URL:', number_tweets_featuring_url.shape[0])
+    number_tweets_featuring_url = int(number_tweets_featuring_url.shape[0])
+    print('Number of tweets with URL:', number_tweets_featuring_url, '➝', (100*number_tweets_featuring_url)/number_of_tweets, '%')
+    results.append({'Metric':'number of tweets with URL', 'Value':number_tweets_featuring_url})
 
     sources = eda.number_of_source_query(source_column=fields['tweet_source'])
     print('Number of data source:', sources.shape[0])
+    results.append({'Metric':'Number of data source', 'Value':sources.shape[0]})
 
     tweets_per_source = eda.number_of_tweets_per_source_query(source_column=fields['tweet_source'])
     print('Number of tweets per source calculated! Saved as '+results_path+' number_of_tweets_per_source.csv')
@@ -460,11 +480,12 @@ def pipeline(setup_file_name, fields, results_path):
     ngrams = eda.run_n_gram(text_column=fields['text_tweet'], n=2, top_n=100, limit=False)
     eda.generate_wordcloud(ngrams)
 
-    sentiment_results = eda.analyze_sentiment(text_column=fields['text_tweet'])
-    for text, sentiment in sentiment_results:
-        print(text, sentiment)
-        print('-----------------------')
+    sentiment_results = eda.analyse_sentiment(tweet_id_column=fields['tweet_id'], text_column=fields['text_tweet'], limit=False)
+    print('Sentiment analysis finished! saved as '+results_path+'sentiment_analysis.csv')
+    sentiment_results.to_csv(results_path+'sentiment_analysis.csv', index=False)
 
+    log_df = pd.DataFrame(results)
+    log_df.to_csv(results_path+'log.csv', index=False)
     # eda.run_liwc(text_column=fields[1], dict_name='dicts_liwc/behavioral-activation-dictionary.dicx')
 
     # from liwc import Liwc
