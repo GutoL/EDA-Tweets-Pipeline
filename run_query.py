@@ -37,4 +37,4 @@ if __name__ == "__main__":
     # fields = ['twitter.id', 'twitter.text', 'twitter.user.id', 'twitter.user.screen_name', 'twitter.user.location']
     # fields = ['id', 'text', 'user_id_str', 'user_location', 'user_screen_name']
 
-    pipeline('setup.json', fields, 'results/')
+    pipeline('setup.json', fields)

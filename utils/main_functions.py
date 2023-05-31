@@ -383,12 +383,14 @@ class EdaTextAnalysis():
 
 # --------------------------------------------------------------------------------------------------
 
-def pipeline(setup_file_name, fields, results_path):
+def pipeline(setup_file_name, fields):
 
     f = open(setup_file_name)
     
     config = json.load(f)
 
+    results_path = config['results_path']
+    
     credentials = service_account.Credentials.from_service_account_file(
         config['key_path'],
         scopes=["https://www.googleapis.com/auth/cloud-platform"],
