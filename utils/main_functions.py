@@ -100,9 +100,12 @@ class EdaTextAnalysis():
         return self.run_query(query, result_file_name=False).iloc[0][0]
 
 
-    def retweets_query(self, fields, limit=100):
+    def retweets_query(self, fields, limit=False):
         tweet_field = fields['text_tweet'] # fields[1]
-        reply_clause = 'WHERE '+tweet_field+' IS NOT NULL AND '+tweet_field+' LIKE "RT%"'+'LIMIT '+str(limit)
+        reply_clause = 'WHERE '+tweet_field+' IS NOT NULL AND '+tweet_field+' LIKE "RT%"'
+        
+        if limit:
+            reply_clause += ' LIMIT '+str(limit)
     
         return self.run_query(self.create_query(fields, reply_clause), result_file_name=self.results_path+'retweets.csv')
     
