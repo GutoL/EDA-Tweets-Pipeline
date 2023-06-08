@@ -18,6 +18,7 @@ import liwc
 from scipy.signal import find_peaks
 import os
 from utils.peak_detection import PeakDetector
+import numpy as np
 
 plt.style.use('ggplot')
 
@@ -310,6 +311,35 @@ class EdaTextAnalysis():
 
         return ngrams
     
+    def peak_detection(self, num_peaks, category=''):
+        query = "SELECT created_at FROM `"+self.database_link+"`"
+        df = self.run_query(query, result_file_name=False) #.iloc[0][0]
+        
+        df['created_at'] = pd.to_datetime(df['created_at'])
+        df.set_index('created_at', inplace=True)
+        
+        tweets = df.resample('D').size()
+        
+        peak_i = np.argpartition(tweets, -int(num_peaks))[-int(num_peaks):]
+        
+        peak_values = tweets.values[peak_i]
+        peak_dates = tweets.index[peak_i]
+        plt.plot(tweets.index, tweets.values)
+        
+        plt.scatter(peak_dates, peak_values, label='Peaks')
+        
+        plt.xlabel('Date and Time')
+        plt.ylabel('Number of Tweets')
+        plt.title(category)
+        plt.xticks(rotation=45)
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+
+        plt.savefig(self.results_path+f'{category}_plot_pd.pdf')
+
+        # return plt.show()
+
 
     def generate_wordcloud(self, ngrams_list):
         # Create a dictionary mapping ngrams to their frequency
@@ -408,6 +438,8 @@ def pipeline(setup_file_name, fields):
 
     print('Starting the pipeline...')
 
+    '''
+
     number_of_tweets = int(eda.number_of_tweets_query())
     print('Number of tweets:', number_of_tweets)
     results.append( {'Metric':'Number of tweets', 'Value':number_of_tweets})
@@ -491,7 +523,9 @@ def pipeline(setup_file_name, fields):
 
     log_df = pd.DataFrame(results)
     log_df.to_csv(results_path+'log.csv', index=False)
-    # eda.run_liwc(text_column=fields[1], dict_name='dicts_liwc/behavioral-activation-dictionary.dicx')
+    # eda.run_liwc(text_column=fields[1], dict_name='dicts_liwc/behavioral-activation-dictionary.dicx') #'''
+
+    eda.peak_detection(3)
 
     # from liwc import Liwc
     # liwc = Liwc('dicts_liwc/behavioral-activation-dictionary.dicx')
