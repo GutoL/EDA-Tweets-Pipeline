@@ -354,6 +354,7 @@ class EdaTextAnalysis():
         plt.axis("off")
         plt.tight_layout(pad=0)
         plt.savefig(self.results_path+'word_cloud.png')
+        plt.clf()
 
     def analyse_sentiment(self, tweet_id_column, text_column, limit):
         query = 'SELECT '+tweet_id_column+','+text_column+' FROM `'+self.database_link+'`'
@@ -524,6 +525,7 @@ def pipeline(setup_file_name, fields):
     # eda.run_liwc(text_column=fields[1], dict_name='dicts_liwc/behavioral-activation-dictionary.dicx') #'''
 
     eda.peak_detection(3)
+    print('Peak detection finished! saved as '+results_path+'plot_pd.pdf')
 
     # from liwc import Liwc
     # liwc = Liwc('dicts_liwc/behavioral-activation-dictionary.dicx')
