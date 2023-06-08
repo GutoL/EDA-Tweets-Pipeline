@@ -438,8 +438,6 @@ def pipeline(setup_file_name, fields):
 
     print('Starting the pipeline...')
 
-    '''
-
     number_of_tweets = int(eda.number_of_tweets_query())
     print('Number of tweets:', number_of_tweets)
     results.append( {'Metric':'Number of tweets', 'Value':number_of_tweets})
