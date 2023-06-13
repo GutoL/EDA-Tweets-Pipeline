@@ -19,6 +19,15 @@ from scipy.signal import find_peaks
 import os
 from utils.peak_detection import PeakDetector
 import numpy as np
+import pywt
+import sqlite3
+from scipy.signal import find_peaks_cwt
+from scipy.signal import cwt, ricker
+from scipy import signal
+
+
+
+
 
 plt.style.use('ggplot')
 
@@ -217,7 +226,6 @@ class EdaTextAnalysis():
         plt.ylabel('Number of Hashtags')
 
         plt.title('Number of Hashtags per Date')
-        # plt.show()
         plt.savefig(self.results_path+'hashtags_per_day.png')
 
         return df
@@ -310,35 +318,134 @@ class EdaTextAnalysis():
         ngrams = self.get_top_ngrams(preprocessed_text, n=n, top_n=top_n)
 
         return ngrams
-    
-    def peak_detection(self, num_peaks, category=''):
-        query = "SELECT created_at FROM `"+self.database_link+"`"
-        df = self.run_query(query, result_file_name=False) #.iloc[0][0]
+            
+    #def peak_detection(self, num_peaks, category=''):
+        # query = "SELECT created_at FROM `"+self.database_link+"`"
+        # df = self.run_query(query, result_file_name=False) #.iloc[0][0]
         
+        # df['created_at'] = pd.to_datetime(df['created_at'])
+        # df.set_index('created_at', inplace=True)
+        
+        # tweets = df.resample('D').size()
+        
+        # peak_i = np.argpartition(tweets, -int(num_peaks))[-int(num_peaks):]
+        
+        # peak_values = tweets.values[peak_i]
+        # peak_dates = tweets.index[peak_i]
+        # plt.plot(tweets.index, tweets.values)
+        
+        # plt.scatter(peak_dates, peak_values, label='Peaks')
+        
+        # plt.xlabel('Date and Time')
+        # plt.ylabel('Number of Tweets')
+        # plt.title(category)
+        # plt.xticks(rotation=50)
+        # plt.grid(True)
+        # plt.legend()
+        # plt.tight_layout()
+
+        # plt.savefig(self.results_path+f'{category}_plot_pd.pdf')
+
+
+    def local_max(self, category=''): 
+
+        def find_local_peaks(data):
+            peaks = []
+            n = len(data)
+
+           
+            if n < 3:
+                return peaks
+
+            for i in range(1, n-1):
+                if data[i-1] < data[i] > data[i+1]:  # Only consider local maximums
+                    peaks.append(i)
+
+            # if n < 3:
+            #     return peaks
+
+            # for i in range(1, n-1):
+            #     if data[i-1] < data[i] > data[i+1]:
+            #         peaks.append(i)
+            #     elif data[i-1] > data[i] < data[i+1]:
+            #         peaks.append(i)
+
+            return peaks
+
+        query = "SELECT created_at FROM `"+self.database_link+"`"
+        df = self.run_query(query, result_file_name=False)
+
         df['created_at'] = pd.to_datetime(df['created_at'])
         df.set_index('created_at', inplace=True)
-        
-        tweets = df.resample('D').size()
-        
-        peak_i = np.argpartition(tweets, -int(num_peaks))[-int(num_peaks):]
-        
-        peak_values = tweets.values[peak_i]
-        peak_dates = tweets.index[peak_i]
-        plt.plot(tweets.index, tweets.values)
-        
-        plt.scatter(peak_dates, peak_values, label='Peaks')
-        
-        plt.xlabel('Date and Time')
+
+        tweet_count = df.resample('H').size()
+
+        peaks = find_local_peaks(tweet_count.values)
+
+        plt.figure(figsize=(12, 6))
+        plt.plot(tweet_count.index, tweet_count.values, label='Number of Tweets')
+        plt.scatter(tweet_count.index[peaks], tweet_count.values[peaks], c='blue', label='Peaks')
+
+        plt.xlabel('Time (Hour)')
         plt.ylabel('Number of Tweets')
         plt.title(category)
         plt.xticks(rotation=45)
-        plt.grid(True)
         plt.legend()
         plt.tight_layout()
+        
+        plt.savefig(self.results_path+f'{category}_plot_max.pdf')
 
-        plt.savefig(self.results_path+f'{category}_plot_pd.pdf')
+    
+    def find_tweet_peaks(self, category=''):
+        query = "SELECT created_at FROM `"+self.database_link+"`"
+        df = self.run_query(query, result_file_name=False)
+        df["hour"] = df['created_at'].dt.strftime('%H')
+        df['created_at'] = df['created_at'].dt.strftime('%Y-%m-%d')
+        df_new = df.groupby(['created_at', "hour"]).size().reset_index(name='number')
 
-        # return plt.show()
+        # Prepare data for peak detection
+        dates = pd.to_datetime(df_new['created_at'] + ' ' + df_new['hour'] + ':00:00')
+        tweet_counts = df_new['number']
+
+        # Apply CWT peak detection
+        cwt_peaks = find_peaks_cwt(tweet_counts, np.arange(1, 10))
+
+        # Plotting
+        fig, ax = plt.subplots()
+        ax.plot(dates, tweet_counts, label='Number of Tweets')
+        ax.scatter(dates[cwt_peaks], tweet_counts[cwt_peaks], color='blue', marker='o', label='Peaks')
+        ax.set_xlabel('Date and Hour')
+        ax.set_ylabel('Number of Tweets')
+        ax.set_title('Number of Tweets over Time')
+        ax.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig(self.results_path+f'{category}_peak_CWT.pdf')
+
+        
+    # def CWT_plot(self, category=''):
+    #     query = "SELECT created_at FROM `"+self.database_link+"`"
+    #     df = self.run_query(query, result_file_name=False)
+
+    #     df['created_at'] = pd.to_datetime(df['created_at'])
+
+    #     tweets_per_hour = df.groupby(pd.Grouper(key='created_at', freq='H')).size()
+
+    #     time_axis = np.arange(len(tweets_per_hour))
+
+    #     widths = np.arange(1, 31)  
+
+    #     cwt_coeffs = cwt(tweets_per_hour, ricker, widths)
+
+    #     plt.figure(figsize=(10, 6))
+    #     plt.imshow(np.abs(cwt_coeffs), extent=[0, len(time_axis), 1, 31], cmap='jet', aspect='auto')
+    #     plt.colorbar(label='CWT Coefficients')
+    #     plt.xlabel('Time (hours)')
+    #     plt.ylabel('Scale')
+    #     plt.title('CWT: Number of Tweets over Time')
+
+    #     plt.tight_layout()  
+    #     plt.savefig(self.results_path+f'{category}_plot_CWT.pdf'
 
 
     def generate_wordcloud(self, ngrams_list):
@@ -522,10 +629,15 @@ def pipeline(setup_file_name, fields):
 
     log_df = pd.DataFrame(results)
     log_df.to_csv(results_path+'log.csv', index=False)
-    # eda.run_liwc(text_column=fields[1], dict_name='dicts_liwc/behavioral-activation-dictionary.dicx') #'''
 
-    eda.peak_detection(3)
-    print('Peak detection finished! saved as '+results_path+'plot_pd.pdf')
+    
+
+
+    # eda.run_liwc(text_column=fields[1], dict_name='dicts_liwc/behavioral-activation-dictionary.dicx') #'''
+    # eda.peak_detection(3)
+    # print('Peak detection finished! saved as '+results_path+'plot_pd.pdf')
+    # lehmann_peak_detection()
+    # print("test worked")
 
     # from liwc import Liwc
     # liwc = Liwc('dicts_liwc/behavioral-activation-dictionary.dicx')
@@ -558,9 +670,14 @@ def pipeline(setup_file_name, fields):
     # plt.plot(x, y)
     # plt.scatter(x=x[i_peaks], y=y[i_peaks], color='blue')
     # plt.axvline(x=x_max, ls='--', color="k")
-    # plt.show()
 
     # plt.plot(data)
     # plt.plot(peaks, data[peaks], "x")
-    # plt.plot(np.zeros_like(data), "--", color="gray")
-    # plt.show() '''
+    # plt.plot(np.zeros_like(data), "--", color="gray") '''
+  
+    eda.local_max()
+    print('Local Max peaks finished! saved as '+results_path+'_plot_max.pdf')
+  
+    eda.find_tweet_peaks()
+    print('CWT peak analysis finished! saved as '+results_path+'_peak_CWT.pdf')
+ 
